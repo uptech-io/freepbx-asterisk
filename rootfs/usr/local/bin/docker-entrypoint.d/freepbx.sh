@@ -49,3 +49,26 @@ function freepbx_post() {
     fwconsole reload
     fwconsole start -q
 }
+
+# Makes Asterisk log failed logins to the file the fail2ban jail reads.
+function ensure_fail2ban_channel() {
+    local etc="${1:?instance_directory required}/asterisk/etc/asterisk"
+    local custom="${etc}/logger_logfiles_custom.conf"
+    local f2b_log="${1}/asterisk/var/log/asterisk/fail2ban"
+    local size
+
+    # A commercial module may declare the channel itself; two entries would log each failure twice.
+    if ! grep -qsE '^[[:space:]]*fail2ban[[:space:]]*=' "${etc}/logger_logfiles_additional.conf" "${custom}"; then
+        log "Adding the fail2ban log channel to Asterisk..."
+        printf '\nfail2ban => warning,security\n' >> "${custom}"
+        chown asterisk:asterisk "${custom}"
+    fi
+
+    # "logger reload" writes a header line to every log file Asterisk has open: no growth, no channel.
+    size="$(stat -c %s "${f2b_log}" 2>/dev/null || echo 0)"
+    asterisk -rx 'logger reload' > /dev/null 2>&1
+
+    if (( $(stat -c %s "${f2b_log}" 2>/dev/null || echo 0) <= size )); then
+        log "Warning: Asterisk is not writing to the fail2ban log; the jail cannot ban."
+    fi
+}

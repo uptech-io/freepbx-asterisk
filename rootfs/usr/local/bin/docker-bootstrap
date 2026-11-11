@@ -50,6 +50,7 @@ run_bash_scripts "${hooks}"
 
 fix_permissions "${instance_directory}"
 freepbx_post
+ensure_fail2ban_channel "${instance_directory}"
 
 if ! start_apache; then
     log "Error: failed to start Apache."
