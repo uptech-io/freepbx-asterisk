@@ -36,10 +36,16 @@ function freepbx_install() {
 }
 
 function freepbx_post() {
-    log "Running FreePBX module upgrades..."
-    fwconsole ma upgradeall
+    # Module upgrades may migrate the database: opt-in.
+    if [[ "${FREEPBX_AUTO_UPGRADE:-0}" == 1 ]]; then
+        log "Running FreePBX module upgrades..."
+        fwconsole ma upgradeall
+    else
+        log "Skipping FreePBX module upgrades (set FREEPBX_AUTO_UPGRADE=1 to enable)."
+    fi
 
     log "Reloading FreePBX configuration..."
+
     fwconsole reload
     fwconsole start -q
 }
