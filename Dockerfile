@@ -113,7 +113,8 @@ RUN groupadd asterisk && \
     sed -ri 's|^#?(AST_USER)=.*|\1=asterisk|; s|^#?(AST_GROUP)=.*|\1=asterisk|' /etc/default/asterisk && \
     sed -ri 's|^;?runuser *=.*|runuser = asterisk|; s|^;?rungroup *=.*|rungroup = asterisk|' "$AST_PREFIX/etc/asterisk/asterisk.conf"
 
-RUN a2enmod rewrite headers expires remoteip && \
+RUN a2dismod status && \
+    a2enmod rewrite headers expires remoteip && \
     ln -snf "/usr/share/zoneinfo/$TZ" /etc/localtime && echo "$TZ" > /etc/timezone && \
     mkdir -p /var/run/asterisk && \
     mkdir -p /var/run/dbus && \
