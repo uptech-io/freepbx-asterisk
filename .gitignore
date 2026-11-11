@@ -23,3 +23,10 @@ share/python-wheels/
 # Translations
 *.mo
 *.pot
+
+# Visual Studio Code
+.vscode/
+
+# Claude Code
+.claude/
+CLAUDE.local.md
