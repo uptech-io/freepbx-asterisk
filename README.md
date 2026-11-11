@@ -1,6 +1,6 @@
 # FreePBX/Asterisk
 
-Este repositório empacota uma imagem Docker para executar **FreePBX 17** sobre **Asterisk 22**, com foco em operação contínua: a instalação real é movida para um volume persistente em `/data`, o bootstrap é automatizado via entrypoint e o runtime já sobe com regras de rede, ODBC, `fail2ban`, `nftables` e ajustes básicos do Apache.
+Este repositório empacota uma imagem Docker para executar **FreePBX 17** sobre **Asterisk 22**, com foco em operação contínua: a instalação real é movida para um volume persistente em `/data`, o bootstrap é automatizado pelo entrypoint e pelo `docker-bootstrap` (sob o `supervisord`) e o runtime já sobe com regras de rede, ODBC, `fail2ban`, `nftables` e ajustes básicos do Apache.
 
 ## O que a imagem entrega
 
@@ -30,7 +30,7 @@ O projeto depende de um volume montado em `/data`.
 /data
 ├── asterisk/                  # binários, configs, spool, logs e runtime do Asterisk
 ├── web/                       # arquivos servidos pelo Apache
-├── fail2ban/                  # configs, db e logs do Fail2Ban
+├── fail2ban/                  # banco de dados do Fail2Ban (banimentos)
 └── entrypoint-hooks.d/
     ├── nftables.d/            # arquivos .nft aplicados no boot
     └── scripts.d/             # scripts .sh executados no boot
@@ -147,7 +147,7 @@ Se `SMTP_HOST`, `SMTP_NAME` ou `SMTP_PASSWORD` não forem informados, autentica�
 Build usando o script do repositório:
 
 ```bash
-./build.sh
+bash build.sh
 ```
 
 Build com argumentos customizados:
@@ -162,10 +162,10 @@ docker build \
 
 ## Hooks e extensões
 
-O bootstrap procura por customizações em:
+O boot aplica customizações de:
 
-- `/data/entrypoint-hooks.d/nftables.d/*.nft`
-- `/data/entrypoint-hooks.d/scripts.d/*.sh`
+- `/data/entrypoint-hooks.d/nftables.d/*.nft`: carregados pelo entrypoint, antes de os serviços subirem;
+- `/data/entrypoint-hooks.d/scripts.d/*.sh`: executados pelo `docker-bootstrap`, com o Asterisk já no ar.
 
 Exemplo de regra extra:
 
