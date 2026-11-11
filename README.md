@@ -11,7 +11,7 @@ Este repositório empacota uma imagem Docker para executar **FreePBX 17** sobre 
 - **Integração**:
   - ODBC para `asteriskcdrdb`
   - sSMTP com relay externo
-- **Serviços internos**:
+- **Serviços internos** (gerenciados pelo `supervisord`, ver [Supervisão de processos](#supervisão-de-processos)):
   - `dbus`
   - `cron`
   - `asterisk`
@@ -38,6 +38,53 @@ O projeto depende de um volume montado em `/data`.
 
 Esse layout permite recriar o container sem reinstalar manualmente a PBX, desde que o volume seja mantido.
 
+## Supervisão de processos
+
+| Programa | Comando | Prioridade | Reinício automático |
+| --- | --- | --- | --- |
+| `dbus` | `dbus-daemon --system --nofork` | 10 | sempre |
+| `fail2ban` | `fail2ban-server -xf start` | 20 | sempre |
+| `asterisk` | `asterisk -f -n -U asterisk -G asterisk` | 30 | só em queda (saída diferente de 0) |
+| `cron` | `cron -f` | 40 | sempre |
+| `bootstrap` | `docker-bootstrap` | 50 | não (roda uma vez por boot) |
+| `apache2` | `apache2-foreground` | 60 | sempre (iniciado pelo bootstrap) |
+
+Convivência com o `fwconsole`:
+
+- `fwconsole stop`: o Asterisk encerra com código 0 e fica parado (o `supervisord` não o reinicia);
+- `fwconsole start`: o `safe_asterisk` do container é um shim que executa `supervisorctl start asterisk`, então o Asterisk volta sob supervisão;
+- `fwconsole restart`: stop seguido de start, com o mesmo comportamento;
+- Uma parada nos primeiros 5 s após o início (`startsecs`) é tratada como falha de partida e o `supervisord` reinicia o Asterisk;
+- Queda do Asterisk (código diferente de 0 ou morte por sinal não tratado, como SIGKILL ou SIGSEGV): reinício automático. `kill`/`killall asterisk` (SIGTERM) contam como parada pedida e o Asterisk fica parado até `supervisorctl start asterisk` ou `fwconsole start`.
+
+Parada: a imagem usa `STOPSIGNAL SIGTERM` e a parada é sequencial (o Asterisk tem até 30 s para encerrar). O prazo padrão do `docker stop` (10 s) é curto; no stack, use `stop_grace_period: 90s`.
+
+## fail2ban
+
+O jail `asterisk` lê `/data/asterisk/var/log/asterisk/fail2ban` e bane falhas de autenticação SIP (eventos `SECURITY` do Asterisk) e chamadas anônimas rejeitadas pelo FreePBX (`Rejecting unknown SIP connection`). Limites em `rootfs/etc/fail2ban/jail.local`: 10 falhas em 10 min banem o IP por 12 h, em todas as portas TCP/UDP; cada novo banimento do mesmo IP dobra o tempo, até 1 semana.
+
+O canal de log é a linha `fail2ban => warning,security` em `/etc/asterisk/logger_logfiles_custom.conf`. O bootstrap a acrescenta quando nem `logger_logfiles_additional.conf` nem `logger_logfiles_custom.conf` declaram um canal `fail2ban` (um módulo comercial pode declarar o seu; duas linhas contariam cada falha duas vezes). Se o módulo passar a declarar o canal depois, apague a linha do `_custom` e rode `asterisk -rx 'logger reload'`. O entrypoint recria o arquivo de log se ele faltar (sem ele o `fail2ban` não sobe). Se o Asterisk não estiver gravando no arquivo, o boot mostra `Warning: Asterisk is not writing to the fail2ban log; the jail cannot ban.`
+
+```bash
+docker exec <container> fail2ban-client status asterisk             # IPs banidos
+docker exec <container> fail2ban-client set asterisk unbanip <ip>   # desbanir um IP
+```
+
+### Ignorar um endereço IP
+
+Um IP ignorado nunca é banido pelo jail. Use para troncos, operadoras e monitoramento, que podem errar a autenticação sem ser ataque.
+
+```bash
+docker exec <container> fail2ban-client set asterisk addignoreip <ip>   # ignorar; aceita vários IPs e redes (CIDR)
+docker exec <container> fail2ban-client get asterisk ignoreip           # listar os ignorados
+docker exec <container> fail2ban-client set asterisk delignoreip <ip>   # deixar de ignorar; um por comando
+```
+
+O `addignoreip` vale na hora, mas:
+
+- **não desbane:** se o IP já estiver banido, rode também o `unbanip`;
+- **não é permanente:** a lista volta ao que está na imagem quando o `fail2ban` reinicia ou recarrega (restart ou recriação do container, `fail2ban-client reload`).
+
 ## Variáveis de ambiente
 
 ### Banco de dados
@@ -50,6 +97,12 @@ Esse layout permite recriar o container sem reinstalar manualmente a PBX, desde 
 | `DBCDR` | `asteriskcdrdb` | Banco de CDR |
 | `DBUSER` | `dev` | Usuário da aplicação |
 | `DBPASSWORD` | `1234567890` | Senha da aplicação |
+
+### FreePBX
+
+| Variável | Padrão | Uso |
+| --- | --- | --- |
+| `FREEPBX_AUTO_UPGRADE` | `0` | Com `1`, cada boot executa `fwconsole ma upgradeall` (atualiza todos os módulos e pode migrar o banco). Com `0`, os módulos só mudam por ação deliberada |
 
 ### Rede
 
@@ -146,7 +199,7 @@ sdp_session=UPTECH/PBX:A22
 ## Observações importantes
 
 - O build usa `freepbx-17.0-latest-EDGE`, então o artefato final pode variar ao longo do tempo;
-- O pós-boot sempre executa `fwconsole ma upgradeall`, o que pode impactar tempo de inicialização;
+- O pós-boot só executa `fwconsole ma upgradeall` com `FREEPBX_AUTO_UPGRADE=1`; antes de atualizar módulos, faça backup do banco;
 - O container pressupõe um ambiente onde `CAP_NET_ADMIN` é aceitável;
 - A configuração SMTP é montada por variáveis de ambiente no boot; se o relay exigir outro formato além do previsto em `ssmtp.sh`, ajuste o script;
 - As regras base do `nftables` já embutem premissas de rede local, como `10.5.0.0/16` para HTTP.
