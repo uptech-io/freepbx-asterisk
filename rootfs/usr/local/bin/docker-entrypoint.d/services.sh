@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 
-# Creates the D-Bus machine-id (also read by FreePBX) and the fail2ban jail log file.
+# Creates the D-Bus machine-id (also read by FreePBX) and the fail2ban jail log file; turns cron mail off.
 function prepare_services() {
     log "Preparing services..."
     dbus-uuidgen --ensure
@@ -8,6 +8,15 @@ function prepare_services() {
     # fail2ban does not start without the jail log file (older volumes lack it).
     local f2b_log=/usr/local/asterisk/var/log/asterisk/fail2ban
     [[ -e "${f2b_log}" ]] || install -o asterisk -g asterisk -m 0640 /dev/null "${f2b_log}"
+
+    # Cron mails job output as "From: root (Cron Daemon)"; the SMTP relay rejects it on every run.
+    local f table mailto='^[[:space:]]*MAILTO[[:space:]]*='
+    for f in /etc/crontab /etc/cron.d/*; do
+        [[ -f "${f}" ]] && sed -i --follow-symlinks -e '1i MAILTO=""' -e "/${mailto}/d" "${f}"
+    done
+    # Read the table before rewriting it: FreePBX keeps its own lines there.
+    table="$(crontab -u asterisk -l 2> /dev/null | grep -Ev "${mailto}")"
+    printf '%s\n' 'MAILTO=""' ${table:+"${table}"} | crontab -u asterisk -
 }
 
 # Waits until Asterisk is fully booted. Returns 1 on timeout (default: 60s).
