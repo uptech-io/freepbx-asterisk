@@ -9,10 +9,10 @@ define RTP_PORTS  = 10000-20000
 table inet raw {
     chain prerouting {
         type filter hook prerouting priority -300; policy accept;
-        # Anti-spoofing: loopback nunca deve chegar por interface != lo.
+        # Anti-spoofing: loopback addresses must never arrive on another interface.
         iifname != "lo" ip  saddr 127.0.0.0/8  counter drop comment "V4 - Anti-Spoofing (loopback)"
         iifname != "lo" ip6 saddr ::1/128      counter drop comment "V6 - Anti-Spoofing (loopback)"
-        # Evita conntrack para RTP (reduz custo e superfície sob flood).
+        # Skip conntrack for RTP (less overhead and exposure under flood).
         udp dport $RTP_PORTS notrack
     }
 }
@@ -42,7 +42,7 @@ table inet filter {
         ip protocol icmp icmp type { destination-unreachable, time-exceeded, parameter-problem } accept
         ip protocol icmp icmp type { echo-request, echo-reply } limit rate 5/second burst 10 packets accept
 
-        # ---------- IPv6 ND/SLAAC ----------
+        # ---------- ICMPv6 ----------
         icmpv6 type { destination-unreachable, packet-too-big, time-exceeded, parameter-problem } accept
         icmpv6 type { echo-request, echo-reply } limit rate 5/second burst 10 packets accept
 
