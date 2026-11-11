@@ -138,7 +138,8 @@ WORKDIR /
 COPY rootfs /
 
 RUN chmod +x /usr/local/bin/* && \
-    chmod 0644 /etc/logrotate.d/asterisk
+    chmod 0644 /etc/logrotate.d/asterisk && \
+    ln -sfn /usr/local/bin/php /usr/bin/php
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 --start-period=10s \
     CMD asterisk -rx 'core show uptime' >/dev/null 2>&1 || exit 1
