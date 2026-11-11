@@ -102,7 +102,7 @@ O `addignoreip` vale na hora, mas:
 
 | Variável | Padrão | Uso |
 | --- | --- | --- |
-| `FREEPBX_AUTO_UPGRADE` | `0` | Com `1`, cada boot executa `fwconsole ma upgradeall` (atualiza todos os módulos e pode migrar o banco). Com `0`, os módulos só mudam por ação deliberada |
+| `FREEPBX_AUTO_UPGRADE` | `0` | Com `1`, cada boot executa `fwconsole ma upgradeall` (atualiza todos os módulos e pode migrar o banco) |
 
 ### Rede
 
@@ -202,4 +202,5 @@ sdp_session=UPTECH/PBX:A22
 - O pós-boot só executa `fwconsole ma upgradeall` com `FREEPBX_AUTO_UPGRADE=1`; antes de atualizar módulos, faça backup do banco;
 - O container pressupõe um ambiente onde `CAP_NET_ADMIN` é aceitável;
 - A configuração SMTP é montada por variáveis de ambiente no boot; se o relay exigir outro formato além do previsto em `ssmtp.sh`, ajuste o script;
+- O `cron` do container não envia e-mail com a saída dos jobs (`MAILTO=""` nos crontabs do sistema e do usuário `asterisk`): o relay recusa o remetente padrão do `cron`;
 - As regras base do `nftables` já embutem premissas de rede local, como `10.5.0.0/16` para HTTP.
