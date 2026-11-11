@@ -3,10 +3,13 @@ bantime.increment = true
 
 findtime = 10m
 bantime  = 12h
+
+# Upper limit for bantime.increment.
+bantime.maxtime = 1w
 maxretry = 10
 
 ignoreself = true
-ignoreip = 127.0.0.1/8 ::1 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10
+ignoreip = 127.0.0.1/8 ::1
 
 sender = noc@uptech.com.br
 
