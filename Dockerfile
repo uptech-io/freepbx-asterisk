@@ -128,6 +128,7 @@ RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \
     apt update && \
     apt install -y --no-install-recommends --no-install-suggests \
         supervisor \
+        logrotate \
         psmisc \
     && \
     rm -f /etc/logrotate.d/apache2
@@ -136,7 +137,8 @@ WORKDIR /
 
 COPY rootfs /
 
-RUN chmod +x /usr/local/bin/docker-entrypoint
+RUN chmod +x /usr/local/bin/* && \
+    chmod 0644 /etc/logrotate.d/asterisk
 
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 --start-period=10s \
     CMD asterisk -rx 'core show uptime' >/dev/null 2>&1 || exit 1

@@ -1,0 +1,31 @@
+# Asterisk logs: reopened by 'logger reload'. "create" keeps the "fail2ban" log present.
+/data/asterisk/var/log/asterisk/full
+/data/asterisk/var/log/asterisk/fail2ban
+/data/asterisk/var/log/asterisk/queue_log
+{
+    su asterisk asterisk
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 asterisk asterisk
+    sharedscripts
+    postrotate
+        /usr/sbin/asterisk -rx 'logger reload' > /dev/null 2>&1 || true
+    endscript
+}
+
+# PHP and pm2 (node) logs: pm2 keeps them open, so truncate in place.
+/data/asterisk/var/log/asterisk/*.log
+{
+    su asterisk asterisk
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
