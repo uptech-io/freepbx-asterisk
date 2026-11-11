@@ -33,6 +33,9 @@ function restore_symlinks() {
     ln -sfn "${instance_directory}/asterisk/etc/asterisk" /etc/asterisk
     ln -sfn "${instance_directory}/asterisk/var/spool/asterisk" /var/spool/asterisk
     ln -sfn "${instance_directory}"/asterisk/sbin/* /usr/sbin/ || true
+
+    ln -sfn /usr/local/bin/safe_asterisk /usr/sbin/safe_asterisk
+
     ln -sfn "${instance_directory}/web" /var/www/html
 
     if [[ -f "${instance_directory}/asterisk/etc/freepbx.conf" ]]; then

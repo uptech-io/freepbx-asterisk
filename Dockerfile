@@ -123,6 +123,15 @@ RUN a2dismod status && \
     rm -rf /etc/fail2ban/jail.d/* && \
     rm -rf /tmp/*
 
+RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=freepbx,target=/var/lib/apt,sharing=locked \
+    apt update && \
+    apt install -y --no-install-recommends --no-install-suggests \
+        supervisor \
+        psmisc \
+    && \
+    rm -f /etc/logrotate.d/apache2
+
 WORKDIR /
 
 COPY rootfs /
@@ -132,5 +141,8 @@ RUN chmod +x /usr/local/bin/docker-entrypoint
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 --start-period=10s \
     CMD asterisk -rx 'core show uptime' >/dev/null 2>&1 || exit 1
 
+# The base image sets STOPSIGNAL SIGWINCH, which supervisord ignores.
+STOPSIGNAL SIGTERM
+
 ENTRYPOINT ["docker-entrypoint"]
-CMD ["apache2-foreground"]
+CMD ["supervisord", "-c", "/etc/supervisor/supervisord.conf"]

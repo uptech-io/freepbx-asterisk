@@ -1,23 +1,32 @@
 # shellcheck shell=bash
 
-function start_dbus() {
-    log "Starting D-Bus daemon..."
+function prepare_services() {
+    log "Preparing services..."
     dbus-uuidgen --ensure
-    dbus-daemon --system --nopidfile --nosyslog
 }
 
-function start_cron() {
-    log "Starting cron service..."
-    /etc/init.d/cron start > /dev/null 2>&1 || true
+# Waits until Asterisk is fully booted. Returns 1 on timeout (default: 60s).
+# Loops in the shell: "timeout" would run outside the bootstrap process group.
+function wait_for_asterisk() {
+    local timeout="${1:-60}"
+    local deadline=$((SECONDS + timeout))
+
+    log "Waiting for Asterisk to become fully booted (timeout: ${timeout} seconds)..."
+
+    # -rx exits 0 whenever it connects, so check the output instead.
+    until asterisk -rx 'core waitfullybooted' 2>/dev/null | grep -q 'fully booted'; do
+        if (( SECONDS >= deadline )); then
+            log "Error: Asterisk is not fully booted after ${timeout} seconds timeout."
+            return 1
+        fi
+        sleep 1
+    done
+
+    log "Asterisk is now fully booted..."
 }
 
-function start_asterisk() {
-    log "Starting Asterisk service..."
-    /etc/init.d/asterisk start > /dev/null 2>&1 || true
-    sleep 5
-}
-
-function start_fail2ban() {
-    log "Starting Fail2ban service..."
-    /usr/bin/fail2ban-server -b > /dev/null 2>&1 || true
+# Starts Apache through supervisord (it is not autostarted).
+function start_apache() {
+    log "Starting Apache through supervisord..."
+    supervisorctl -c "${SUPERVISOR_CONF}" start apache2
 }
