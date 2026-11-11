@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build -t registry.uptech.com.br/freepbx:latest .
+docker build -t ghcr.io/uptech-io/freepbx:latest .

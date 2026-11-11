@@ -4,13 +4,13 @@ ARG ASTVERSION=22
 ARG IONCUBE_ARCH="x86-64"
 ARG TZ=America/Recife
 
-LABEL br.com.uptech.app="FreePBX/Asterisk"
-LABEL maintainer="UPTECH <contato@uptech.com.br>"
+LABEL br.com.uptech.image.name="@uptech-io/freepbx-asterisk"
+LABEL br.com.uptech.image.vendor="UPTECH"
 
-ENV DEBIAN_FRONTEND=noninteractive
-ENV AST_PREFIX=/usr/local/asterisk
-ENV APACHE_RUN_USER=asterisk
-ENV APACHE_RUN_GROUP=asterisk
+ENV DEBIAN_FRONTEND=noninteractive \
+    AST_PREFIX=/usr/local/asterisk \
+    APACHE_RUN_USER=asterisk \
+    APACHE_RUN_GROUP=asterisk
 
 RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=freepbx,target=/var/lib/apt,sharing=locked \
