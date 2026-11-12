@@ -1,6 +1,6 @@
 # FreePBX/Asterisk
 
-Este repositório empacota uma imagem Docker para executar **FreePBX 17** sobre **Asterisk 22**, com foco em operação contínua: a instalação real é movida para um volume persistente em `/data`, o bootstrap é automatizado pelo entrypoint e pelo `docker-bootstrap` (sob o `supervisord`) e o runtime já sobe com regras de rede, ODBC, `fail2ban`, `nftables` e ajustes básicos do Apache.
+Este repositório empacota uma imagem Docker para executar **FreePBX 17** sobre **Asterisk 22**, com foco em operação contínua.
 
 ## O que a imagem entrega
 
@@ -31,6 +31,7 @@ O projeto depende de um volume montado em `/data`.
 ├── asterisk/                  # binários, configs, spool, logs e runtime do Asterisk
 ├── web/                       # arquivos servidos pelo Apache
 ├── fail2ban/                  # banco de dados do Fail2Ban (banimentos)
+│   └── jail.d/                # ajustes dos jails (*.local), como a lista de IPs ignorados
 └── entrypoint-hooks.d/
     ├── nftables.d/            # arquivos .nft aplicados no boot
     └── scripts.d/             # scripts .sh executados no boot
@@ -83,7 +84,21 @@ docker exec <container> fail2ban-client set asterisk delignoreip <ip>   # deixar
 O `addignoreip` vale na hora, mas:
 
 - **não desbane:** se o IP já estiver banido, rode também o `unbanip`;
-- **não é permanente:** a lista volta ao que está na imagem quando o `fail2ban` reinicia ou recarrega (restart ou recriação do container, `fail2ban-client reload`).
+- **não é permanente:** a lista volta ao que está nos arquivos de configuração quando o `fail2ban` reinicia ou recarrega (restart ou recriação do container, `fail2ban-client reload`).
+
+Para tornar a lista permanente, grave-a em `/data/fail2ban/jail.d/ignoreip.local`. O `/etc/fail2ban/jail.d` do container é um link para essa pasta do volume, e o `fail2ban` lê os arquivos `*.local` dela depois do `jail.local`:
+
+```bash
+docker exec -i <container> sh -c 'cat > /data/fail2ban/jail.d/ignoreip.local' <<'EOF'
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1 <ip> <rede/CIDR>
+EOF
+docker exec <container> fail2ban-client -t                      # valida a sintaxe
+docker exec <container> fail2ban-client reload                  # aplica sem reiniciar o PBX
+docker exec <container> fail2ban-client get asterisk ignoreip   # confere a lista em vigor
+```
+
+O arquivo substitui a lista da imagem, por isso mantenha `127.0.0.1/8 ::1`. O `reload` também não desbane: se o IP já estiver banido, rode o `unbanip`. Valide sempre com o `-t`: com erro de sintaxe o `reload` é recusado e, no boot seguinte, o `fail2ban` não sobe (o container fica sem banimento).
 
 ## Variáveis de ambiente
 
