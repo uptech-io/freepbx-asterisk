@@ -1,6 +1,6 @@
 # shellcheck shell=bash
 
-# Creates the D-Bus machine-id (also read by FreePBX) and the fail2ban jail log file; turns cron mail off.
+# Creates the D-Bus machine-id (also read by FreePBX), the fail2ban jail log file and jail.d; turns cron mail off.
 function prepare_services() {
     log "Preparing services..."
     dbus-uuidgen --ensure
@@ -8,6 +8,9 @@ function prepare_services() {
     # fail2ban does not start without the jail log file (older volumes lack it).
     local f2b_log=/usr/local/asterisk/var/log/asterisk/fail2ban
     [[ -e "${f2b_log}" ]] || install -o asterisk -g asterisk -m 0640 /dev/null "${f2b_log}"
+
+    # /etc/fail2ban/jail.d links here: per-instance jail settings kept in the volume.
+    mkdir -p /data/fail2ban/jail.d
 
     # Cron mails job output as "From: root (Cron Daemon)"; the SMTP relay rejects it on every run.
     local f table mailto='^[[:space:]]*MAILTO[[:space:]]*='

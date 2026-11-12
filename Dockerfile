@@ -120,7 +120,8 @@ RUN a2dismod status && \
     mkdir -p /var/run/dbus && \
     chown asterisk:asterisk /var/run/asterisk && \
     chown messagebus:messagebus /var/run/dbus && \
-    rm -rf /etc/fail2ban/jail.d/* && \
+    rm -rf /etc/fail2ban/jail.d && \
+    ln -s /data/fail2ban/jail.d /etc/fail2ban/jail.d && \
     rm -rf /tmp/*
 
 RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \
