@@ -83,9 +83,11 @@ RUN wget -q "https://downloads.ioncube.com/loader_downloads/ioncube_loaders_lin_
 RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=freepbx,target=/var/lib/apt,sharing=locked \
     apt update && \
-    wget -q "http://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTVERSION}-current.tar.gz" -O asterisk.tar.gz && \
+    wget -q "https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTVERSION}-current.tar.gz" -O asterisk.tar.gz && \
+    wget -q "https://downloads.asterisk.org/pub/telephony/asterisk/asterisk-${ASTVERSION}-current.sha256" -O asterisk.sha256 && \
+    echo "$(cut -d' ' -f1 asterisk.sha256)  asterisk.tar.gz" | sha256sum -c - && \
     tar xvf asterisk.tar.gz && \
-    rm asterisk.tar.gz && \
+    rm asterisk.tar.gz asterisk.sha256 && \
     cd asterisk*/ && \
     sed -i 's/"Asterisk"/"UPTECH"/g' res/res_pjsip/pjsip_configuration.c && \
     ./contrib/scripts/install_prereq install && \
@@ -104,7 +106,7 @@ RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \
     make samples && \
     make config
 
-RUN wget -q http://mirror.freepbx.org/modules/packages/freepbx/freepbx-17.0-latest-EDGE.tgz -O freepbx.tgz && \
+RUN wget -q https://mirror.freepbx.org/modules/packages/freepbx/freepbx-17.0-latest-EDGE.tgz -O freepbx.tgz && \
     tar zxf freepbx.tgz && \
     mv freepbx /usr/src/
 
