@@ -4,7 +4,7 @@ function prepare_services() {
     log "Preparing services..."
     dbus-uuidgen --ensure
 
-    # fail2ban does not start without the jail log file (older volumes lack it).
+    # fail2ban does not start without the jail log file, which the image does not ship.
     local f2b_log=/usr/local/asterisk/var/log/asterisk/fail2ban
     [[ -e "${f2b_log}" ]] || install -o asterisk -g asterisk -m 0640 /dev/null "${f2b_log}"
 
