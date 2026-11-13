@@ -1,0 +1,90 @@
+volumes:
+  data:
+  db:
+
+networks:
+  entrypoint:
+    name: entrypoint
+    external: true
+  ipvlan:
+    name: ipvlan_swarm_network
+    external: true
+  backend:
+    internal: true
+
+services:
+  app:
+    image: ghcr.io/uptech-io/freepbx:${FREEPBX_TAG:?set FREEPBX_TAG in .env}
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          cpus: "8"
+          memory: 8G
+      placement:
+        constraints:
+          - "node.hostname==node1.uptech.com.br"
+
+    stop_grace_period: 90s
+
+    environment:
+      EXTRA_IPV4: ${EXTRA_IPV4:?set EXTRA_IPV4 in .env}
+      IPV4_GATEWAY: ${IPV4_GATEWAY:?set IPV4_GATEWAY in .env}
+      EXTRA_IPV6: ${EXTRA_IPV6:?set EXTRA_IPV6 in .env}
+      IPV6_GATEWAY: ${IPV6_GATEWAY:?set IPV6_GATEWAY in .env}
+      #
+      SMTP_HOST: ${SMTP_HOST:?set SMTP_HOST in .env}
+      SMTP_NAME: ${SMTP_NAME:?set SMTP_NAME in .env}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:?set SMTP_PASSWORD in .env}
+      #
+      DBROOT_PASSWORD: ${DBROOT_PASSWORD:?set DBROOT_PASSWORD in .env}
+      DBNAME: ${DBNAME:?set DBNAME in .env}
+      DBUSER: ${DBUSER:?set DBUSER in .env}
+      DBPASSWORD: ${DBPASSWORD:?set DBPASSWORD in .env}
+      DBHOST: ${DBHOST:?set DBHOST in .env}
+
+    volumes:
+      - data:/data
+
+    cap_add:
+      - CAP_NET_ADMIN
+
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
+
+    networks:
+      entrypoint:
+        aliases:
+          - pbx.uptech.local
+      ipvlan:
+      backend:
+
+  db:
+    image: mariadb:11.8
+
+    deploy:
+      mode: replicated
+      replicas: 1
+      resources:
+        limits:
+          cpus: "4"
+          memory: 4G
+      placement:
+        constraints:
+          - "node.hostname==node1.uptech.com.br"
+
+    stop_grace_period: 60s
+
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DBROOT_PASSWORD:?set DBROOT_PASSWORD in .env}
+
+    volumes:
+      - db:/var/lib/mysql
+
+    networks:
+      - backend
