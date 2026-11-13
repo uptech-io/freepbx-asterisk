@@ -9,6 +9,18 @@ function prepare_instance() {
     if [[ -f "${instance_directory}/asterisk/etc/asterisk/asterisk.conf" ]]; then
         log "Previous installation detected on ${instance_directory}"
 
+        # Asterisk follows the image; its configuration stays as the volume has it.
+        # Modules first: an interrupted copy leaves the binary different and is redone.
+        # --remove-destination: never write through a link planted in the volume.
+        if [[ -f /usr/local/asterisk/sbin/asterisk ]] \
+            && ! cmp -s /usr/local/asterisk/sbin/asterisk "${instance_directory}/asterisk/sbin/asterisk"; then
+            log "Updating the Asterisk binaries and modules from the image..."
+            cp -a --remove-destination /usr/local/asterisk/usr/lib64 "${instance_directory}/asterisk/usr/" \
+                && cp -a --remove-destination /usr/local/asterisk/var/lib/asterisk/documentation \
+                    "${instance_directory}/asterisk/var/lib/asterisk/" \
+                && cp -a --remove-destination /usr/local/asterisk/sbin "${instance_directory}/asterisk/" || exit 1
+        fi
+
         rm -rf /usr/local/asterisk
         return 0
     fi
