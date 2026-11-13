@@ -2,6 +2,7 @@
 
 function prepare_instance() {
     local instance_directory="${1:?instance_directory required}"
+    local tables
 
     rm -rf /var/www/html
 
@@ -16,6 +17,17 @@ function prepare_instance() {
 
     if [[ -d "${instance_directory}/asterisk" ]] && ! rmdir "${instance_directory}/asterisk" 2> /dev/null; then
         log "Error: ${instance_directory}/asterisk has files but no etc/asterisk/asterisk.conf; move it away to install."
+        exit 1
+    fi
+
+    # An empty volume over a database in use is the wrong volume: installing would overwrite the PBX.
+    tables="$(mysql -h "${DBHOST-db}" -u root -p"${DBROOT_PASSWORD-root}" -N \
+        -e "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = '${DBNAME-asterisk}'")" || {
+        log "Error: could not query the database as root (see the mysql error above)."
+        exit 1
+    }
+    if [[ "${tables}" != 0 ]]; then
+        log "Error: ${instance_directory} has no installation, but database ${DBNAME-asterisk} has tables; refusing to install over it."
         exit 1
     fi
 
