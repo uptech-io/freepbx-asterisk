@@ -17,6 +17,7 @@ function prepare_database() {
     [[ -n "${DBPASSWORD:-}" ]] || { log "Error: DBPASSWORD is required to install."; exit 1; }
     [[ "${DBUSER-dev}" != root ]] || { log "Error: DBUSER cannot be root."; exit 1; }
     [[ "${DBNAME-asterisk}" =~ ^[A-Za-z0-9_]+$ ]] || { log "Error: DBNAME accepts only letters, digits and _."; exit 1; }
+    [[ "${DBCDR-asteriskcdrdb}" == asteriskcdrdb ]] || { log "Error: DBCDR is not supported: the CDR database is always asteriskcdrdb."; exit 1; }
 
     log "Creating the databases and the application user if they do not exist..."
     mysql -h "${DBHOST-db}" -u root -p"${DBROOT_PASSWORD-root}" -e "

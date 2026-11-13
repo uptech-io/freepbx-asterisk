@@ -15,7 +15,6 @@ function freepbx_install() {
         [[ "${line}" == *'You have successfully installed FreePBX'* ]] && installed=0
     done < <(./install --no-interaction \
         --dbname="${DBNAME-asterisk}" \
-        --cdrdbname="${DBCDR-asteriskcdrdb}" \
         --dbuser="${DBUSER-dev}" \
         --dbpass="${DBPASSWORD:?DBPASSWORD is required to install}" \
         --dbhost="${DBHOST-db}" \
