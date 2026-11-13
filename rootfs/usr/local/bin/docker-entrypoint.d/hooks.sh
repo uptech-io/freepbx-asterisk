@@ -12,7 +12,11 @@ function load_nftables_configs() {
     fi
 
     log "Loading nftables basic rules..."
-    nft "${nft_args[@]}" -f /etc/nftables.nft
+    # Without the base rules SIP would be open and fail2ban could not block: do not start.
+    nft "${nft_args[@]}" -f /etc/nftables.nft || {
+        log "Error: nftables base rules failed to load (is NET_ADMIN granted?)."
+        exit 1
+    }
 
     log "Loading nftables configurations from ${config_dir}"
     if [[ -d "${config_dir}" ]]; then
