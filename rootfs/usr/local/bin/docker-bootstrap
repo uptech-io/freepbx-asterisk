@@ -30,8 +30,7 @@ fi
 if [[ -f "${INSTALL_PENDING_FLAG}" ]]; then
     if [[ $failed -ne 0 ]]; then
         log "Warning: Asterisk is down; FreePBX install postponed to the next boot."
-    # /data is writable by the asterisk user: only a root-owned marker counts.
-    elif [[ "$(stat -c %u "${INSTALL_PENDING_FLAG}")" != 0 ]]; then
+    elif ! install_pending; then
         log "Warning: ignoring ${INSTALL_PENDING_FLAG}: not owned by root."
         rm -f "${INSTALL_PENDING_FLAG}"
     else

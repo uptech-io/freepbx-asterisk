@@ -22,8 +22,6 @@ wait_for_db
 add_extra_ips
 
 prepare_instance "${instance_directory}"
-should_install_freepbx=$?
-
 restore_symlinks "${instance_directory}"
 
 # Load the firewall before any service starts listening.
@@ -34,16 +32,12 @@ write_ssmtp_ini
 
 prepare_services
 
-if [[ $should_install_freepbx -eq 0 ]]; then
+if install_pending; then
     fix_permissions "${instance_directory}"
-    # Created after the chown so it stays root-owned (docker-bootstrap requires it).
-    touch "${INSTALL_PENDING_FLAG}"
-fi
 
-# With another CMD the bootstrap does not run; the install waits for the next
-# boot under supervisord.
-if [[ -f "${INSTALL_PENDING_FLAG}" && "${1##*/}" != supervisord ]]; then
-    log "Warning: FreePBX install is pending and will only run under supervisord."
+    if [[ "${1##*/}" != supervisord ]]; then
+        log "Warning: FreePBX install is pending and will only run under supervisord."
+    fi
 fi
 
 # supervisord (CMD) starts the services and docker-bootstrap.

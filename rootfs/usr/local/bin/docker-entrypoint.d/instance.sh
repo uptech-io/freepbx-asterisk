@@ -7,21 +7,31 @@ function prepare_instance() {
 
     if [[ -f "${instance_directory}/asterisk/etc/asterisk/asterisk.conf" ]]; then
         log "Previous installation detected on ${instance_directory}"
+
         rm -rf /usr/local/asterisk
-
-        return 1
-    else
-        log "No installation detected. Starting installation mode..."
-
-        mkdir -p "${instance_directory}"/asterisk
-        mkdir -p "${instance_directory}"/web
-        mkdir -p "${instance_directory}"/fail2ban
-        mkdir -p "${instance_directory}"/entrypoint-hooks.d/{nftables.d,scripts.d}
-
-        mv /usr/local/asterisk "${instance_directory}/"
+        return 0
     fi
 
-    return 0
+    log "No installation detected. Starting installation mode..."
+
+    if [[ -d "${instance_directory}/asterisk" ]] && ! rmdir "${instance_directory}/asterisk" 2> /dev/null; then
+        log "Error: ${instance_directory}/asterisk has files but no etc/asterisk/asterisk.conf; move it away to install."
+        exit 1
+    fi
+
+    mkdir -p "${instance_directory}"/web
+    mkdir -p "${instance_directory}"/fail2ban
+    mkdir -p "${instance_directory}"/entrypoint-hooks.d/{nftables.d,scripts.d}
+
+    # Marker first, then a copy that only shows up when complete: a boot killed here must not look installed.
+    rm -f "${INSTALL_PENDING_FLAG}"
+    touch "${INSTALL_PENDING_FLAG}"
+    rm -rf "${instance_directory}/asterisk.new"
+
+    cp -a /usr/local/asterisk "${instance_directory}/asterisk.new" \
+        && mv -T "${instance_directory}/asterisk.new" "${instance_directory}/asterisk" || exit 1
+
+    rm -rf /usr/local/asterisk
 }
 
 function restore_symlinks() {
