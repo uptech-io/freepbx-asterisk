@@ -19,13 +19,6 @@ function freepbx_install() {
         --dbpass="${DBPASSWORD:?DBPASSWORD is required to install}" \
         --dbhost="${DBHOST-db}" \
         --webroot="${instance_directory}/web" \
-        --astetcdir="${instance_directory}/asterisk/etc/asterisk" \
-        --astmoddir="${instance_directory}/asterisk/usr/lib64/asterisk/modules" \
-        --astvarlibdir="${instance_directory}/asterisk/var/lib/asterisk" \
-        --astagidir="${instance_directory}/asterisk/var/lib/asterisk/agi-bin" \
-        --astspooldir="${instance_directory}/asterisk/var/spool/asterisk" \
-        --astrundir="${instance_directory}/asterisk/var/run/asterisk" \
-        --astlogdir="${instance_directory}/asterisk/var/log/asterisk" \
         --ampbin="${instance_directory}/asterisk/var/lib/asterisk/bin" \
         --ampplayback="${instance_directory}/asterisk/var/lib/asterisk/playback" 2>&1)
     (( installed == 0 )) || return 1
