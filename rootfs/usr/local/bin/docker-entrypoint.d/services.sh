@@ -1,6 +1,5 @@
 # shellcheck shell=bash
 
-# Creates the D-Bus machine-id (also read by FreePBX), the fail2ban jail log file and jail.d; turns cron mail off.
 function prepare_services() {
     log "Preparing services..."
     dbus-uuidgen --ensure
@@ -22,8 +21,6 @@ function prepare_services() {
     printf '%s\n' 'MAILTO=""' ${table:+"${table}"} | crontab -u asterisk -
 }
 
-# Waits until Asterisk is fully booted. Returns 1 on timeout (default: 60s).
-# Loops in the shell: "timeout" would run outside the bootstrap process group.
 function wait_for_asterisk() {
     local timeout="${1:-60}"
     local deadline=$((SECONDS + timeout))
@@ -42,7 +39,6 @@ function wait_for_asterisk() {
     log "Asterisk is now fully booted..."
 }
 
-# Starts Apache through supervisord (it is not autostarted).
 function start_apache() {
     log "Starting Apache through supervisord..."
     supervisorctl -c "${SUPERVISOR_CONF}" start apache2
