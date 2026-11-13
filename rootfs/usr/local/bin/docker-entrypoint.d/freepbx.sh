@@ -2,6 +2,7 @@
 
 function freepbx_install() {
     local instance_directory="${1:?instance_directory required}"
+    local line installed=1
 
     log "Creating asteriskcdrdb database if it does not exist..."
     mysql -h "${DBHOST-db}" -u root -p"${DBROOT_PASSWORD-root}" \
@@ -9,9 +10,16 @@ function freepbx_install() {
         GRANT ALL PRIVILEGES ON asteriskcdrdb.* TO '${DBUSER-dev}'@'%' IDENTIFIED BY '${DBPASSWORD-1234567890}';
         FLUSH PRIVILEGES;"
 
+    # Left by an install that died in this same container: with them ./install would skip the modules.
+    [[ -L /etc/freepbx.conf ]] || rm -f /etc/freepbx.conf /etc/amportal.conf
+
     cd /usr/src/freepbx
 
-    ./install --no-interaction \
+    # ./install exits 1 even on success: only its last line tells.
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        printf '%s\n' "${line}"
+        [[ "${line}" == *'You have successfully installed FreePBX'* ]] && installed=0
+    done < <(./install --no-interaction \
         --dbname="${DBNAME-asterisk}" \
         --cdrdbname="${DBCDR-asteriskcdrdb}" \
         --dbuser="${DBUSER-dev}" \
@@ -26,11 +34,12 @@ function freepbx_install() {
         --astrundir="${instance_directory}/asterisk/var/run/asterisk" \
         --astlogdir="${instance_directory}/asterisk/var/log/asterisk" \
         --ampbin="${instance_directory}/asterisk/var/lib/asterisk/bin" \
-        --ampplayback="${instance_directory}/asterisk/var/lib/asterisk/playback"
+        --ampplayback="${instance_directory}/asterisk/var/lib/asterisk/playback" 2>&1)
+    (( installed == 0 )) || return 1
 
     if [[ ! -L "/etc/freepbx.conf" ]]; then
-        cp /etc/freepbx.conf "${instance_directory}/asterisk/etc/" || true
-        cp /etc/amportal.conf "${instance_directory}/asterisk/etc/" || true
+        # The next boots read both files from the volume: without them the install does not count.
+        cp /etc/amportal.conf /etc/freepbx.conf "${instance_directory}/asterisk/etc/" || return 1
         cp /usr/sbin/fwconsole "${instance_directory}/asterisk/sbin/" || true
     fi
 }
