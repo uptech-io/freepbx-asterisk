@@ -4,12 +4,6 @@ function freepbx_install() {
     local instance_directory="${1:?instance_directory required}"
     local line installed=1
 
-    log "Creating asteriskcdrdb database if it does not exist..."
-    mysql -h "${DBHOST-db}" -u root -p"${DBROOT_PASSWORD-root}" \
-    -e "CREATE DATABASE IF NOT EXISTS asteriskcdrdb;
-        GRANT ALL PRIVILEGES ON asteriskcdrdb.* TO '${DBUSER-dev}'@'%' IDENTIFIED BY '${DBPASSWORD-1234567890}';
-        FLUSH PRIVILEGES;"
-
     # Left by an install that died in this same container: with them ./install would skip the modules.
     [[ -L /etc/freepbx.conf ]] || rm -f /etc/freepbx.conf /etc/amportal.conf
 
@@ -23,7 +17,7 @@ function freepbx_install() {
         --dbname="${DBNAME-asterisk}" \
         --cdrdbname="${DBCDR-asteriskcdrdb}" \
         --dbuser="${DBUSER-dev}" \
-        --dbpass="${DBPASSWORD-1234567890}" \
+        --dbpass="${DBPASSWORD:?DBPASSWORD is required to install}" \
         --dbhost="${DBHOST-db}" \
         --webroot="${instance_directory}/web" \
         --astetcdir="${instance_directory}/asterisk/etc/asterisk" \

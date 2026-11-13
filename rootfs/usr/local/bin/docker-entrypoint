@@ -33,6 +33,7 @@ write_ssmtp_ini
 prepare_services
 
 if install_pending; then
+    prepare_database
     fix_permissions "${instance_directory}"
 
     if [[ "${1##*/}" != supervisord ]]; then
