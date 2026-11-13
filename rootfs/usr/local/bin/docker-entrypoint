@@ -12,20 +12,16 @@ source "${LIB_DIR}/instance.sh"
 source "${LIB_DIR}/odbc.sh"
 source "${LIB_DIR}/ssmtp.sh"
 source "${LIB_DIR}/services.sh"
-source "${LIB_DIR}/freepbx.sh"
 source "${LIB_DIR}/hooks.sh"
-
-instance_directory="/data"
-hooks="/data/entrypoint-hooks.d"
 
 wait_for_db
 add_extra_ips
 
-prepare_instance "${instance_directory}"
-restore_symlinks "${instance_directory}"
+prepare_instance "${INSTANCE_DIR}"
+restore_symlinks "${INSTANCE_DIR}"
 
 # Load the firewall before any service starts listening.
-load_nftables_configs "${hooks}"
+load_nftables_configs "${HOOKS_DIR}"
 
 write_odbc_ini
 write_ssmtp_ini
@@ -34,7 +30,7 @@ prepare_services
 
 if install_pending; then
     prepare_database
-    fix_permissions "${instance_directory}"
+    fix_permissions "${INSTANCE_DIR}"
 
     if [[ "${1##*/}" != supervisord ]]; then
         log "Warning: FreePBX install is pending and will only run under supervisord."

@@ -1,7 +1,9 @@
 # shellcheck shell=bash
 
 SUPERVISOR_CONF=/etc/supervisor/supervisord.conf
-INSTALL_PENDING_FLAG=/data/.freepbx-install-pending
+INSTANCE_DIR=/data
+HOOKS_DIR="${INSTANCE_DIR}/entrypoint-hooks.d"
+INSTALL_PENDING_FLAG="${INSTANCE_DIR}/.freepbx-install-pending"
 
 function log() {
     echo "$(date +"%Y-%m-%d %T") $1"

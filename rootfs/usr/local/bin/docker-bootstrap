@@ -9,17 +9,11 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LIB_DIR="${SCRIPT_DIR}/docker-entrypoint.d"
 
 source "${LIB_DIR}/common.sh"
-source "${LIB_DIR}/db.sh"
-source "${LIB_DIR}/network.sh"
 source "${LIB_DIR}/instance.sh"
-source "${LIB_DIR}/odbc.sh"
-source "${LIB_DIR}/ssmtp.sh"
 source "${LIB_DIR}/services.sh"
 source "${LIB_DIR}/freepbx.sh"
 source "${LIB_DIR}/hooks.sh"
 
-instance_directory="/data"
-hooks="/data/entrypoint-hooks.d"
 failed=0
 
 # Keep going without Asterisk, as the entrypoint always did.
@@ -33,7 +27,7 @@ if [[ -f "${INSTALL_PENDING_FLAG}" ]]; then
     elif ! install_pending; then
         log "Warning: ignoring ${INSTALL_PENDING_FLAG}: not owned by root."
         rm -f "${INSTALL_PENDING_FLAG}"
-    elif freepbx_install "${instance_directory}"; then
+    elif freepbx_install "${INSTANCE_DIR}"; then
         rm -f "${INSTALL_PENDING_FLAG}"
     else
         log "Error: FreePBX install did not complete; will retry on next boot."
@@ -41,12 +35,12 @@ if [[ -f "${INSTALL_PENDING_FLAG}" ]]; then
     fi
 fi
 
-run_bash_scripts "${hooks}"
+run_bash_scripts "${HOOKS_DIR}"
 
-fix_permissions "${instance_directory}"
+fix_permissions "${INSTANCE_DIR}"
 
 freepbx_post
-ensure_fail2ban_channel "${instance_directory}"
+ensure_fail2ban_channel "${INSTANCE_DIR}"
 
 if ! start_apache; then
     log "Error: failed to start Apache."
