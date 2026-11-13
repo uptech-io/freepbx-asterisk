@@ -94,7 +94,9 @@ RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \
     ./configure --prefix="$AST_PREFIX" --libdir="$AST_PREFIX/usr/lib64" --with-pjproject-bundled --with-jansson-bundled && \
     make menuselect.makeopts && \
     ./contrib/scripts/get_mp3_source.sh && \
+    # BUILD_NATIVE (-march=native) would tie the binary to the build machine's CPU.
     menuselect/menuselect \
+    --disable BUILD_NATIVE \
     --enable format_mp3 \
     --enable chan_mobile \
     --enable codec_ulaw \
