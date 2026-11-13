@@ -5,3 +5,6 @@
 .claude/
 CLAUDE.local.md
 PENDING.local.md
+
+# Local stack file
+docker-compose.local.yml
