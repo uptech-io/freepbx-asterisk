@@ -48,5 +48,6 @@ function fix_permissions() {
     local instance_directory="${1:?instance_directory required}"
 
     log "Fixing permissions..."
-    chown -R asterisk:asterisk "${instance_directory}"
+    chown root:root "${instance_directory}"
+    chown -R asterisk:asterisk "${instance_directory}/asterisk" "${instance_directory}/web"
 }

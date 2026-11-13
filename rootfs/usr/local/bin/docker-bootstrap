@@ -48,11 +48,7 @@ fi
 
 run_bash_scripts "${hooks}"
 
-# fix_permissions hands /data to asterisk; a pending marker must stay root-owned or the next boot ignores it.
-install_pending=0
-[[ -f "${INSTALL_PENDING_FLAG}" && "$(stat -c %u "${INSTALL_PENDING_FLAG}")" == 0 ]] && install_pending=1
 fix_permissions "${instance_directory}"
-(( install_pending )) && chown root:root "${INSTALL_PENDING_FLAG}"
 
 freepbx_post
 ensure_fail2ban_channel "${instance_directory}"
