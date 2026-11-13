@@ -126,6 +126,8 @@ RUN a2dismod status && \
     chown messagebus:messagebus /var/run/dbus && \
     rm -rf /etc/fail2ban/jail.d && \
     ln -s /data/fail2ban/jail.d /etc/fail2ban/jail.d && \
+    rm -rf /var/spool/cron/crontabs && \
+    ln -s /data/cron/crontabs /var/spool/cron/crontabs && \
     rm -rf /tmp/*
 
 RUN --mount=type=cache,id=freepbx,target=/var/cache/apt,sharing=locked \

@@ -11,6 +11,9 @@ function prepare_services() {
     # /etc/fail2ban/jail.d links here: per-instance jail settings kept in the volume.
     mkdir -p /data/fail2ban/jail.d
 
+    # /var/spool/cron/crontabs links here: a new container keeps the jobs FreePBX scheduled.
+    install -d -o root -g crontab -m 1730 /data/cron/crontabs
+
     # Cron mails job output as "From: root (Cron Daemon)"; the SMTP relay rejects it on every run.
     local f table mailto='^[[:space:]]*MAILTO[[:space:]]*='
     for f in /etc/crontab /etc/cron.d/*; do
