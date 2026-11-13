@@ -41,5 +41,7 @@ if install_pending; then
     fi
 fi
 
+# Not needed past this point: keep them out of every service's environment.
+unset DBROOT_PASSWORD SMTP_PASSWORD
 # supervisord (CMD) starts the services and docker-bootstrap.
 exec "$@"
