@@ -1,3 +1,3 @@
 #!/bin/bash
 
-docker build -t ghcr.io/uptech-io/freepbx:latest .
+docker build --pull -t ghcr.io/uptech-io/freepbx:latest .
