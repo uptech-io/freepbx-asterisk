@@ -5,13 +5,21 @@ function prepare_services() {
     dbus-uuidgen --ensure
 
     # fail2ban does not start without the jail log file, which the image does not ship.
+    # Its directory is asterisk's: through a link planted there, root would create the file elsewhere.
     local f2b_log=/usr/local/asterisk/var/log/asterisk/fail2ban
-    [[ -e "${f2b_log}" ]] || install -o asterisk -g asterisk -m 0640 /dev/null "${f2b_log}"
+    if [[ ! -e "${f2b_log}" ]]; then
+        if [[ "$(realpath "${f2b_log%/*}")" == "${INSTANCE_DIR}/asterisk/var/log/asterisk" ]]; then
+            install -o asterisk -g asterisk -m 0640 /dev/null "${f2b_log}"
+        else
+            log "Error: ${f2b_log%/*} is not the volume's log directory; jail log not created."
+        fi
+    fi
 
     # /etc/fail2ban/jail.d links here: per-instance jail settings kept in the volume.
     mkdir -p /data/fail2ban/jail.d
 
     # /var/spool/cron/crontabs links here: a new container keeps the jobs FreePBX scheduled.
+    install -d -o root -g root -m 0755 /data/cron
     install -d -o root -g crontab -m 1730 /data/cron/crontabs
 
     # Cron mails job output as "From: root (Cron Daemon)"; the SMTP relay rejects it on every run.
