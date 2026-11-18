@@ -55,8 +55,8 @@ function ensure_fail2ban_channel() {
     # A commercial module may declare the channel itself; two entries would log each failure twice.
     if ! grep -qsE '^[[:space:]]*fail2ban[[:space:]]*=' "${etc}/logger_logfiles_additional.conf" "${custom}"; then
         log "Adding the fail2ban log channel to Asterisk..."
-        printf '\nfail2ban => warning,security\n' >> "${custom}"
-        chown asterisk:asterisk "${custom}"
+        # As asterisk: root would write through a link planted in that directory.
+        printf '\nfail2ban => warning,security\n' | runuser -u asterisk -- tee -a "${custom}" > /dev/null
     fi
 
     # "logger reload" writes a header line to every log file Asterisk has open: no growth, no channel.
