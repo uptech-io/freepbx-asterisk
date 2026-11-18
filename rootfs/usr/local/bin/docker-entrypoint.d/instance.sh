@@ -2,12 +2,34 @@
 
 function prepare_instance() {
     local instance_directory="${1:?instance_directory required}"
-    local tables
+    local tables dir
 
     rm -rf /var/www/html
 
     if [[ -f "${instance_directory}/asterisk/etc/asterisk/asterisk.conf" ]]; then
         log "Previous installation detected on ${instance_directory}"
+
+        # Root changes and then trusts these: a link planted in an old volume would lead it elsewhere.
+        for dir in "${instance_directory}"/asterisk{,/sbin,/usr} "${HOOKS_DIR}" \
+            "${instance_directory}"/fail2ban{,/jail.d} "${instance_directory}"/cron{,/crontabs}; do
+            [[ ! -L "${dir}" ]] || { log "Error: ${dir} is a link, not a directory."; exit 1; }
+        done
+
+        # Root runs sbin and loads usr/lib64: the asterisk user must not be able to change them.
+        chown root:root "${instance_directory}" "${instance_directory}/asterisk"
+        chmod a+rX,go-w "${instance_directory}" "${instance_directory}/asterisk"
+        chown -R root:root "${instance_directory}"/asterisk/{sbin,usr}
+        chmod -R a+rX,go-w "${instance_directory}"/asterisk/{sbin,usr}
+
+        # Older images gave the whole volume to asterisk: root runs the hooks and fail2ban trusts its jails.
+        # The owner changes last: an interrupted run is redone on the next boot.
+        for dir in "${HOOKS_DIR}" "${instance_directory}/fail2ban"; do
+            if [[ -d "${dir}" && "$(stat -c %u "${dir}")" != 0 ]]; then
+                log "Giving ${dir} back to root..."
+                chmod -R go-w "${dir}"
+                chown -R root:root "${dir}"
+            fi
+        done
 
         # Asterisk follows the image; its configuration stays as the volume has it.
         # Modules first: an interrupted copy leaves the binary different and is redone.
@@ -83,5 +105,6 @@ function fix_permissions() {
 
     log "Fixing permissions..."
     chown root:root "${instance_directory}"
-    chown -R asterisk:asterisk "${instance_directory}/asterisk" "${instance_directory}/web"
+    # State only: the code (sbin, usr) stays root's.
+    chown -R asterisk:asterisk "${instance_directory}"/asterisk/{etc,var} "${instance_directory}/web"
 }
