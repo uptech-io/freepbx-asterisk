@@ -1,5 +1,6 @@
 [DEFAULT]
 bantime.increment = true
+bantime.rndtime = 1h
 
 findtime = 10m
 bantime  = 12h
@@ -10,13 +11,13 @@ bantime.maxtime = 1w
 ignoreself = true
 ignoreip = 127.0.0.1/8 ::1
 
-sender = noc@uptech.com.br
+banaction = nftables[type=allports,blocktype=drop]
+banaction_allports = nftables[type=allports,blocktype=drop]
+protocol = tcp,udp
 
 [asterisk]
 enabled  = true
 filter   = asterisk
 logpath  = /usr/local/asterisk/var/log/asterisk/fail2ban
 backend  = auto
-protocol = tcp,udp
-banaction = nftables[type=allports,blocktype=drop]
 maxretry = 10
