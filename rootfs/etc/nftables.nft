@@ -2,7 +2,7 @@
 
 # ========================================
 define HTTP_PORT = 80
-define SIP_PORTS  = { 5060, 5061 }
+define SIP_PORTS  = { tcp . 5060, udp . 5060, tcp . 5061 }
 define RTP_PORTS  = 10000-20000
 # ========================================
 
@@ -35,6 +35,15 @@ table inet filter {
 
         # Accept traffic from the local loopback interface.
         iifname "lo" accept
+
+        # ---------- SIP packet cap (every state) ----------
+        meta l4proto . th dport $SIP_PORTS \
+            meter sip-capv4 { ip saddr timeout 1m limit rate over 1000/second burst 5000 packets } \
+            counter drop comment "V4 - SIP packet cap"
+        meta l4proto . th dport $SIP_PORTS \
+            meter sip-capv6 { ip6 saddr and ffff:ffff:ffff:ffff:: timeout 1m limit rate over 1000/second burst 5000 packets } \
+            counter drop comment "V6 - SIP packet cap"
+
         # Accept established and related connections.
         ct state established,related accept
 
@@ -54,16 +63,24 @@ table inet filter {
             nd-neighbor-advert
         } ip6 hoplimit 255 accept
 
+        # ---------- IPv6 MLD ----------
+        icmpv6 type {
+            mld-listener-query,
+            mld-listener-report,
+            mld-listener-done,
+            mld2-listener-report
+        } ip6 hoplimit 1 accept
+
         # ---------- HTTP ----------
-        ct state new ip saddr 10.5.0.0/16 tcp dport $HTTP_PORT accept
+        ct state new ip saddr $proxy_subnet tcp dport $HTTP_PORT accept
         ct state new tcp dport $HTTP_PORT \
             meter flood-httpv6 { ip6 saddr and ffff:ffff:ffff:ffff:: timeout 5m limit rate 10/second burst 5 packets } accept
 
         # ---------- SIP and RTP ----------
-        ct state new meta l4proto { tcp, udp } th dport $SIP_PORTS \
+        ct state new meta l4proto . th dport $SIP_PORTS \
             meter flood-sipv4 { ip saddr timeout 1m limit rate 50/second burst 25 packets } \
             counter accept
-        ct state new meta l4proto { tcp, udp } th dport $SIP_PORTS \
+        ct state new meta l4proto . th dport $SIP_PORTS \
             meter flood-sipv6 { ip6 saddr and ffff:ffff:ffff:ffff:: timeout 1m limit rate 100/second burst 50 packets } \
             counter accept
 
