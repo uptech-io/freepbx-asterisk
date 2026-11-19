@@ -42,11 +42,16 @@ app_smoke() {
   grep -q 'File list:.*/usr/local/asterisk/var/log/asterisk/fail2ban' <<<"$out" || bad=1
   out=$(timeout 30 fail2ban-client get asterisk bantime.maxtime 2>&1); s+=$'\n'$out
   [[ $out == 604800 ]] || bad=1
+  out=$(timeout 30 fail2ban-client get asterisk bantime.rndtime 2>&1); s+=$'\n'$out
+  [[ $out == 3600 ]] || bad=1
+  # The package's default: nothing in the image sets it, and the ban database lives in the volume.
+  out=$(timeout 30 fail2ban-client get dbpurgeage 2>&1); s+=$'\n'$out
+  [[ $out == *'- 86400seconds' ]] || bad=1
   out=$(timeout 30 fail2ban-client get asterisk ignoreip 2>&1); s+=$'\n'$out
   # Exact trunk and monitoring addresses may be listed too (whole private ranges: I11).
   grep -Eq '^[|`]- 127\.0\.0\.[01]/8$' <<<"$out" && grep -q '^[|`]- ::1$' <<<"$out" || bad=1
-  if (( bad )); then fail "M10 fail2ban: ping, jail log, maxtime 604800, ignoreip"; ev <<<"$s"
-  else ok "M10 fail2ban: jail asterisk, maxtime 1w, loopback ignored"; fi
+  if (( bad )); then fail "M10 fail2ban: ping, jail log, maxtime 604800, rndtime 3600, purge age 86400, ignoreip"; ev <<<"$s"
+  else ok "M10 fail2ban: jail asterisk, maxtime 1w, rndtime 1h, purge age 1d, loopback ignored"; fi
 
   n=$(stat -c %s "$f2b" 2>/dev/null)
   timeout 30 asterisk -rx 'logger reload' >/dev/null 2>&1
@@ -57,6 +62,13 @@ app_smoke() {
   else fail "M11 jail log: size ${n:-?} -> ${m:-?} after logger reload, $s"; fi
   out=$(nft list chain inet filter input 2>&1)
   grep -q 'policy drop' <<<"$out" && ok "M12 nftables input policy drop" || { fail "M12 nftables input chain"; head -n 5 <<<"$out" | ev; }
+  # The rule's text only: the test network has no IPv6 to carry an MLD query.
+  s=$(grep -F 'ip6 hoplimit 1 accept' <<<"$out"); bad=0
+  for m in mld-listener-query mld-listener-report 'mld-listener-(done|reduction)' mld2-listener-report; do
+    grep -Eq "[ {]$m[ ,}]" <<<"$s" || bad=1
+  done
+  if (( bad )); then fail "M28 no rule accepts the four MLD types with hop limit 1"; ev <<<"${s:-none}"
+  else ok "M28 MLD (ICMPv6 130-132 and 143) accepted with hop limit 1"; fi
   bad=0 s=''
   for u in '/admin/config.php 403' '/.well-known/acme-challenge/x 200|404' '/.freepbx-known/x 200|404'; do
     m=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "http://127.0.0.1${u%% *}")
@@ -96,10 +108,20 @@ app_smoke() {
   out=$(tr '\0' '\n' </proc/1/environ | grep -oE '^(DBROOT_PASSWORD|SMTP_PASSWORD)=' | sort -u)
   [[ -r /proc/1/environ && -z $out ]] && ok "M24 services run without the root and SMTP passwords" \
     || { fail "M24 passwords left in supervisord's environment"; ev <<<"${out:-/proc/1/environ not readable}"; }
+  # Out of memory, the kernel must pick an Apache process before Asterisk (60-apache2.conf).
+  n=0 out=''
+  for u in $(pgrep -x apache2); do
+    m=$(cat "/proc/$u/oom_score_adj" 2>/dev/null) || continue
+    n=$((n + 1)); [[ $m == 500 ]] || out+="apache2 $u: $m; "
+  done
+  m=$(cat "/proc/$p/oom_score_adj" 2>&1)
+  [[ $m =~ ^-?[0-9]+$ ]] && (( m < 500 )) || out+="asterisk: $m; "
+  if (( n >= 2 )) && [[ -z $out ]]; then ok "M25 oom_score_adj: 500 on $n Apache processes, $m on Asterisk"
+  else fail "M25 oom_score_adj (want 500 on Apache, less on Asterisk)"; ev <<<"${out:-$n Apache processes (want 2 or more)}"; fi
 }
 
 proxy_smoke() {
-  local u want c h
+  local u want c h out
   for u in '/admin/config.php 200|302' '/admin/.htaccess 403' '/admin/modules/core/module.xml 403' \
            '/server-status 403|404'; do
     want=${u#* } u=${u%% *}
@@ -110,6 +132,11 @@ proxy_smoke() {
   if grep -qix 'x-content-type-options: nosniff' <<<"$h" && grep -qix "content-security-policy: frame-ancestors 'self'" <<<"$h" \
      && grep -qix 'server: apache' <<<"$h" && ! grep -qi '^x-powered-by:' <<<"$h"; then ok "X2 security headers"
   else fail "X2 security headers"; ev <<<"$h"; fi
+  # Without keep-alive the proxy cannot reuse a connection that Apache is closing (an occasional 502).
+  out=$(curl -s -o /dev/null -o /dev/null -w '%{num_connects} %header{connection}\n' --max-time 5 \
+        "http://$APP_IP/admin/config.php" "http://$APP_IP/admin/config.php")
+  [[ ${out,,} == $'1 close\n1 close' ]] && ok "X6 no keep-alive: one connection per request, Connection: close" \
+    || { fail "X6 keep-alive between the proxy and Apache (connections opened, Connection header)"; ev <<<"$out"; }
   # The X3 and X5 verdicts, and X4's log check, read the app log on the host.
   curl -s -o /dev/null --max-time 5 -H 'X-Forwarded-For: 203.0.113.7' "http://$APP_IP/admin/config.php"
   curl -s -o /dev/null --max-time 5 -H 'X-Forwarded-For: 127.0.0.1' "http://$APP_IP/admin/config.php?x5"
@@ -119,8 +146,41 @@ proxy_smoke() {
   [[ $c != 413 && $c != 000 ]] && ok "X4 12 MB upload answered $c" || fail "X4 12 MB upload answered $c"
 }
 
+proxy_sip() {
+  local port r out='' i j
+  # A connected UDP socket gets the ICMP port unreachable as an error on its next write:
+  # "refused" = the firewall let the datagram in and nothing listens; "silent" = filtered.
+  for port in 5061 19999; do
+    r=error
+    if exec 3<>"/dev/udp/$APP_IP/$port"; then
+      r=silent; printf x >&3; sleep 0.5
+      printf x >&3 2>/dev/null || r=refused
+      exec 3>&-
+    fi
+    out+="$port $r "
+  done
+  [[ $out == '5061 silent 19999 refused ' ]] && ok "M26 UDP 5061 is filtered; UDP 19999 (RTP range, no listener) is refused" \
+    || fail "M26 UDP probes: $out(want 5061 silent, 19999 refused)"
+  # 20000 datagrams from one source in about 2 s, for M27. PJSIP discards 32 bytes or less unparsed.
+  if exec 3<>"/dev/udp/$APP_IP/5060"; then
+    for i in {1..200}; do for j in {1..100}; do printf '\r\n' >&3; done; sleep 0.005; done 2>/dev/null
+    exec 3>&-
+  fi
+}
+
+app_drops() {
+  local out p=${PROXY_IP//./\\.}
+  out=$(nft list set inet filter dropv4 2>&1)
+  if grep -Eq "(^|[ {,])$p \. (udp|17) \. 5061 " <<<"$out" && ! grep -Eq "(^|[ {,])$p \. (udp|17) \. 19999 " <<<"$out"; then
+    ok "M29 drop record holds the proxy's UDP 5061 probe and not the accepted 19999"
+  else fail "M29 drop record (nft list set inet filter dropv4)"; ev <<<"$out"; fi
+  out=$(nft list chain inet filter input 2>&1)
+  [[ $(grep -v '^[[:space:]]*}' <<<"$out" | tail -n 1) == *dropv6* ]] && ok "M29 drop record is the last rule of inet filter input" \
+    || { fail "M29 the last rule of inet filter input is not the drop record"; tail -n 4 <<<"$out" | ev; }
+}
+
 phase_smoke() {
-  local p aip pip t log h
+  local p aip pip t log h n m out cap='s/.* counter packets \([0-9]*\) .*comment "V4 - SIP packet cap"$/\1/p'
   need_app || return
   in_app app_smoke
   p=$(cid proxy); aip=$(ip_of "$C"); pip=$(ip_of "$p")
@@ -138,6 +198,18 @@ phase_smoke() {
       absent "X5 a loopback X-Forwarded-For is not taken as the client" "$log" '^127\.0\.0\.1 .*config\.php\?x5'
     else fail "X5 the request with a loopback X-Forwarded-For is not in the access log"; fi
   else fail "X3 no access log line '203.0.113.7 $pip'"; grep -F '203.0.113.7' <<<"$log" | head -n 3 | ev; fi
+  n=$(dk exec "$C" nft list chain inet filter input 2>/dev/null | sed -n "$cap")
+  run_fn proxy_sip exec -i -e "APP_IP=$aip" "$p" timeout 600 bash -s
+  out=$(dk exec "$C" nft list chain inet filter input 2>&1); m=$(sed -n "$cap" <<<"$out")
+  # Ahead of the accept of established flows: the cap must also hold what the "ct state new" limits never see.
+  if [[ $n =~ ^[0-9]+$ && $m =~ ^[0-9]+$ ]] && (( m - n >= 5000 )) \
+     && awk '/SIP packet cap/ { c = NR } !e && /established/ { e = NR } END { exit !(c && c < e) }' <<<"$out"; then
+    ok "M27 SIP packet cap, ahead of the established accept, dropped $((m - n)) of 20000 datagrams from one source"
+  else
+    fail "M27 SIP packet cap: counter ${n:-?} -> ${m:-?} (want 5000 more), or not ahead of the established accept"
+    grep -E 'SIP packet cap|established' <<<"$out" | ev
+  fi
+  in_app app_drops -e "PROXY_IP=$pip"
   # The first probe runs 30 s after the start; a failed early probe keeps "starting" 30 s more.
   for _ in 1 2 3 4 5 6 7 8; do h=$(dk inspect -f '{{.State.Health.Status}}' "$C"); [[ $h == starting ]] || break; sleep 5; done
   [[ $h == healthy ]] && ok "H1 container healthy" || fail "H1 container health: $h"

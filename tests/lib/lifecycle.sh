@@ -35,6 +35,7 @@ g3_bad_hooks() {
 # A container on an ipvlan network, as in production: EXTRA_IPV4 must replace the interface's IPv4,
 # EXTRA_IPV6 join its IPv6, both default routes go there and the hooks get the interface's name.
 # Before R0, like G3. Without a parent interface, Docker keeps the network apart from the host's.
+# PROXY_SUBNET rides along: the same listing shows the range of the HTTP rule.
 g4_ipvlan() {
   local net=$NAME-ipvlan out rc i
   # What an interrupted run left would make every later run fail here.
@@ -46,7 +47,7 @@ g4_ipvlan() {
   # On the front network too: Docker's default route goes through it, for the entrypoint to move.
   out=$(dk create --name "$NAME-g4" --pull never --network "$NAME-front" --cap-add NET_ADMIN -e DBHOST="$NAME-db" \
         -e EXTRA_IPV4=192.0.2.50/24 -e IPV4_GATEWAY=192.0.2.254 -e EXTRA_IPV6=2001:db8:5::50/64 \
-        -e IPV6_GATEWAY=2001:db8:5::fe -v "$NAME-data:/data" "$IMAGE" \
+        -e IPV6_GATEWAY=2001:db8:5::fe -e PROXY_SUBNET=198.51.100.0/24 -v "$NAME-data:/data" "$IMAGE" \
         sh -c 'ip -o addr show; ip -4 route show default; ip -6 route show default; nft list chain inet filter input' 2>&1) \
     && out=$(dk network connect "$NAME-back" "$NAME-g4" 2>&1) && out=$(dk network connect "$net" "$NAME-g4" 2>&1) \
     && out=$(dk start -a "$NAME-g4" 2>&1); rc=$?
@@ -65,6 +66,18 @@ g4_ipvlan() {
   else fail "G4 $i: IPv6 address or default route"; grep -E " $i +inet6 |^default via [0-9a-f]*:" <<<"$out" | ev; fi
   grep -qF "iifname \"$i\" tcp dport 4569 accept comment \"g4\"" <<<"$out" && ok "G4 the .nft hook got the interface name ($i)" \
     || { fail "G4 the .nft hook did not get the interface name"; grep -F 4569 <<<"$out" | ev; }
+  grep -qF 'ip saddr 198.51.100.0/24 tcp dport 80 accept' <<<"$out" && ok "G4 PROXY_SUBNET is the range of the IPv4 HTTP rule" \
+    || { fail "G4 the IPv4 HTTP rule does not have PROXY_SUBNET (198.51.100.0/24)"; grep -F 'dport 80 ' <<<"$out" | ev; }
+}
+
+# A PROXY_SUBNET that nft and Apache would not read alike must stop the boot, unprinted. Before R0, like G3.
+g5_bad_subnet() {
+  local out rc
+  out=$(dk run --rm --name "$NAME-g5" --pull never --network "$NAME-back" --cap-add NET_ADMIN -e DBHOST="$NAME-db" \
+        -e PROXY_SUBNET=10.5.0.0/16,198.51.100.0/24 -v "$NAME-data:/data" "$IMAGE" true 2>&1); rc=$?
+  if [[ $rc != 0 ]] && grep -qF 'Error: PROXY_SUBNET is not' <<<"$out" && ! grep -qF 198.51.100 <<<"$out"; then
+    ok "G5 an invalid PROXY_SUBNET stops the boot and is not logged"
+  else fail "G5 invalid PROXY_SUBNET: rc $rc; want a failed boot with 'Error: PROXY_SUBNET is not' and without the value"; tail -n 5 <<<"$out" | ev; fi
 }
 
 # Functions passed to run_fn or in_app run inside a container: of the host, only run_fn's helpers exist there.
@@ -169,6 +182,7 @@ phase_lifecycle() {
   g2_refuse
   g3_bad_hooks
   g4_ipvlan
+  g5_bad_subnet
   in_app r0_prepare -e "R0_JOB=$R0_JOB"
   (( FAILS )) && save_log
   out=$(dk kill "$C" 2>&1) || { fail "docker kill of the app container"; ev <<<"$out"; return; }

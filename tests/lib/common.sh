@@ -54,7 +54,7 @@ gate() {
 
 teardown() {
   local x t out err=''
-  for x in container:app container:g2 container:g3 container:g4 container:proxy container:db \
+  for x in container:app container:g2 container:g3 container:g4 container:g5 container:proxy container:db \
            volume:data volume:dbdata network:front network:back network:ipvlan; do
     t=${x%%:*} x=$NAME-${x#*:}
     dk "$t" inspect "$x" >/dev/null 2>&1 || continue

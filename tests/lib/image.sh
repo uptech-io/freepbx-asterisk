@@ -3,7 +3,7 @@
 # Functions passed to run_fn or in_app run inside a container: of the host, only run_fn's helpers exist there.
 
 image_checks() {
-  local ast=/usr/local/asterisk m e b f s out mods vals bad=0 nf=0 t ext
+  local ast=/usr/local/asterisk m e b f s out mods vals bad=0 nf=0 t ext j l n a p pid c w
   out=$("$ast/sbin/asterisk" -V 2>&1) && ok "I2 $out" || { fail "I2 asterisk -V"; ev <<<"$out"; }
   if grep -Eq '^runuser *= *asterisk' "$ast/etc/asterisk/asterisk.conf" \
      && grep -Eq '^rungroup *= *asterisk' "$ast/etc/asterisk/asterisk.conf" && id asterisk >/dev/null 2>&1; then
@@ -128,7 +128,7 @@ PY
   (( bad )) || ok "I9 logrotate config"
 
   # The ruleset is checked against this host's kernel, hence the version in the line.
-  out=$(nft -c -f /etc/nftables.nft 2>&1) && ok "I10 nft -c (kernel $(uname -r))" \
+  out=$(nft -c --define "proxy_subnet=$PROXY_SUBNET" -f /etc/nftables.nft 2>&1) && ok "I10 nft -c (kernel $(uname -r))" \
     || { fail "I10 nft -c (kernel $(uname -r))"; ev <<<"$out"; }
 
   # The jail needs its log file; this container is thrown away.
@@ -149,6 +149,21 @@ PY
     elif grep -Eq '^Lines: .*\b1 matched\b' <<<"$out"; then ok "I11 filter matches $t"
     else warn "I11 filter does not match $t"; fi
   done
+  # The image has no iptables: a jail added in jail.d must inherit the nftables action, on TCP and UDP.
+  mkdir -p /data/fail2ban/jail.d
+  printf '[i11probe]\nenabled = true\nfilter = asterisk\nlogpath = %s\n' "$ast/var/log/asterisk/fail2ban" >/data/fail2ban/jail.d/i11probe.local
+  out=$(fail2ban-client -d 2>&1)
+  rm -f /data/fail2ban/jail.d/i11probe.local
+  bad=0
+  for j in 'i11probe nftables tcp,udp' 'asterisk nftables-tcp tcp' 'asterisk nftables-udp udp'; do
+    read -r n a p <<<"$j"
+    l=$(grep -F "['multi-set', '$n', 'action', '$a', " <<<"$out")
+    grep -qxF "['set', '$n', 'addaction', '$a']" <<<"$out" && grep -qF "['protocol', '$p']" <<<"$l" \
+      && grep -qF "['type', 'allports']" <<<"$l" && grep -qF "['blocktype', 'drop']" <<<"$l" && continue
+    fail "I11 jail $n: want action $a with nftables allports, drop, protocol $p"; bad=1
+    { grep -F "['set', '$n', 'addaction'" <<<"$out"; grep -oE "\['(type|blocktype|protocol)', '[^']*'\]" <<<"$l"; } | ev
+  done
+  (( bad )) || ok "I11 jail asterisk and a jail from jail.d ban with nftables: all ports, drop, TCP and UDP"
 
   t=$(du -sm /tmp 2>/dev/null | cut -f1)
   (( ${t:-0} < 50 )) && ok "I12 /tmp holds ${t} MB" || warn "I12 /tmp holds ${t} MB"
@@ -157,6 +172,31 @@ PY
   # FreePBX's scheduled jobs live in the volume (the link dangles here: no volume).
   out=$(readlink /var/spool/cron/crontabs)
   [[ $out == /data/cron/crontabs ]] && ok "I12 cron spool links into the volume" || fail "I12 /var/spool/cron/crontabs -> ${out:-not a link}"
+
+  # A real Apache with loopback as the proxy network. No FreePBX here: a request that is let in gets 404.
+  printf '<?php sleep(30);\n' >/var/www/html/i14.php
+  PROXY_SUBNET=127.0.0.0/8 apache2-foreground >>/tmp/apache.log 2>&1 &
+  pid=$!
+  for _ in {1..20}; do
+    c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 2 -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1/i13)
+    [[ $c == 000 ]] || break; sleep 1
+  done
+  [[ $c == 404 ]] && ok "I13 PROXY_SUBNET opens the GUI to its range (127.0.0.1 gets 404, not 403)" \
+    || { fail "I13 127.0.0.1 with PROXY_SUBNET=127.0.0.0/8 got $c (want 404)"; tail -n 5 /tmp/apache.log | ev; }
+  # Twelve requests that hold a worker for 30 s each: prefork must stop at MaxRequestWorkers and say so.
+  for _ in {1..12}; do curl -s -o /dev/null --max-time 60 http://127.0.0.1/i14.php & done
+  m=0 w=0
+  for _ in {1..25}; do
+    c=$(pgrep -c -P "$pid" -x apache2); (( c > m )) && m=$c
+    grep -q AH00161 /tmp/apache.log && (( ++w >= 3 )) && break
+    sleep 1
+  done
+  grep -q AH00161 /tmp/apache.log && (( m == 10 )) && ok "I14 12 slow requests: 10 Apache workers, then AH00161" \
+    || { fail "I14 12 slow requests: up to $m Apache workers (want 10 and AH00161)"; tail -n 5 /tmp/apache.log | ev; }
+  # Read only now: Apache writes the access log line after it answers.
+  grep -q '^203\.0\.113\.9 127\.0\.0\.1 .*"GET /i13 ' /tmp/apache.log && ok "I13 X-Forwarded-For is taken from PROXY_SUBNET" \
+    || { fail "I13 no access log line '203.0.113.9 127.0.0.1 ... /i13'"; grep -F /i13 /tmp/apache.log | head -n 3 | ev; }
+  # Apache is left to die with the container: on SIGTERM it signals its process group, this shell included.
 }
 
 phase_image() {

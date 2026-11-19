@@ -26,10 +26,10 @@ As fases rodam na ordem da tabela, qualquer que seja a ordem dos argumentos. Sem
 | --- | --- | --- | --- |
 | `lint` | sintaxe, `shellcheck`, `hadolint` | S1–S3 | só o repositório |
 | `build` | `docker build` e metadados da imagem | I1 | internet |
-| `image` | conferências num container descartável | I2–I12 | a imagem |
+| `image` | conferências num container descartável | I2–I14 | a imagem |
 | `up` | remove o ambiente anterior, sobe tudo e instala o FreePBX | T1, N1, G1, B1–B4 | a imagem |
-| `smoke` | serviços, banco, firewall, HTTP pelo proxy, healthcheck | M1–M24, X1–X5, H1, H2 | ambiente de pé |
-| `lifecycle` | reinícios do Asterisk, boot recusado, boot numa rede `ipvlan`, troca do container `app` e `smoke` de novo | L1–L4, G2–G4, R0, R2–R4 | ambiente de pé |
+| `smoke` | serviços, banco, firewall, HTTP pelo proxy, healthcheck | M1–M29, X1–X6, H1, H2 | ambiente de pé |
+| `lifecycle` | reinícios do Asterisk, boot recusado, boot numa rede `ipvlan`, troca do container `app` e `smoke` de novo | L1–L4, G2–G5, R0, R2–R4 | ambiente de pé |
 | `fail2ban` | `logrotate`, bane o proxy e desbane | L5, F1–F7 | ambiente de pé |
 | `down` | `docker stop` cronometrado e remoção | R1, T1 | nada |
 
@@ -43,7 +43,7 @@ Todos os nomes derivam de `NAME`, sem portas publicadas:
 
 - redes `<NAME>-front` (bridge `10.5.0.0/16`), `<NAME>-back` (bridge interna) e, de passagem, `<NAME>-ipvlan` (`ipvlan` sem interface pai, `192.0.2.0/24` e `2001:db8:5::/64`);
 - volumes `<NAME>-data` e `<NAME>-dbdata`;
-- containers `<NAME>-db`, `<NAME>-app`, `<NAME>-proxy` e, de passagem, `<NAME>-g2`, `<NAME>-g3` e `<NAME>-g4`.
+- containers `<NAME>-db`, `<NAME>-app`, `<NAME>-proxy` e, de passagem, `<NAME>-g2` a `<NAME>-g5`.
 
 `up` e `down` removem qualquer objeto com esses nomes: use no `down` o mesmo `NAME` do `up`.
 
