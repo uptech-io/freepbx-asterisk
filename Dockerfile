@@ -12,6 +12,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
     APACHE_RUN_USER=asterisk \
     APACHE_RUN_GROUP=asterisk
 
+ENV PROXY_SUBNET=10.5.0.0/16
+
 RUN --mount=type=cache,id=freepbx,target=/var/lib/apt,sharing=locked \
     apt update && \
     apt upgrade -y && \
