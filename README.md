@@ -8,7 +8,8 @@ Imagem Docker do **FreePBX 17** sobre **Asterisk 22**, com Apache e PHP 8.2, ODB
 - **Volume persistente em `/data`**, com o serviço fixado no nó do volume;
 - **Uma única réplica**, com `order: stop-first` (o padrão): duas PBX não podem usar o mesmo volume;
 - **`cap_add: [NET_ADMIN]`**, para o firewall, os IPs e as rotas. Sem ela, o container não sobe;
-- **Proxy reverso na rede `10.5.0.0/16`**: a GUI só responde a essa faixa;
+- **Proxy reverso numa rede IPv4**, por padrão `10.5.0.0/16` (`PROXY_SUBNET`): a GUI só responde a essa faixa;
+- **Memória**: reserve cerca de 5G para o Apache (10 requisições de até 512M cada), além do Asterisk;
 - **`stop_grace_period: 90s`**: os programas param um de cada vez, e o prazo padrão de 10 s não basta;
 - **`max-size` no driver de log**: a imagem não limita o log do container.
 
@@ -46,6 +47,7 @@ O FreePBX vem só com os módulos básicos. IVR, filas, grupos de toque, `userma
 | `SMTP_PASSWORD` | sem padrão | Senha no relay |
 | `MAIL_FROM_ADDRESS` | `pbx@uptech.com.br` | Destino dos e-mails para usuários do sistema, como o `root`. Não é o remetente |
 | `MAIL_DOMAIN` | `uptech.com.br` | Domínio com que a PBX se apresenta ao relay |
+| `PROXY_SUBNET` | `10.5.0.0/16` | Rede do proxy reverso: um IPv4 ou uma rede IPv4 em CIDR. Só ela acessa a GUI por IPv4 e tem o `X-Forwarded-For` aceito. Com valor inválido, o container não sobe |
 
 - A instalação cria os bancos `DBNAME` e `asteriskcdrdb` e dá ao `DBUSER` acesso aos dois. Um `DBUSER` que já existe passa a ter a senha `DBPASSWORD`;
 - Aspa simples (`'`) ou barra invertida (`\`) em `DBUSER` e `DBPASSWORD` quebram a instalação;
@@ -112,6 +114,8 @@ O `supervisord` é o processo principal do container (PID 1):
 | `bootstrap` | não: roda uma vez por boot e inicia o `apache2` |
 | `apache2` | sempre |
 
+O `apache2` fecha a conexão a cada resposta e atende até 10 requisições por vez; as demais esperam na fila. O aviso `AH00161` no log é esperado: sai uma vez, a partir de 6 requisições simultâneas. Se faltar memória no container, o kernel encerra de preferência um processo do Apache, e não o Asterisk.
+
 Logs:
 
 - **`docker logs`**: `dbus`, `fail2ban`, `bootstrap` e `apache2`;
@@ -131,13 +135,12 @@ O healthcheck só consulta o Asterisk. Parado por 2 a 2,5 minutos, o container f
 
 O entrypoint carrega o `nftables` antes de qualquer serviço; se falhar, o container não sobe. A entrada é descartada por padrão, exceto:
 
-- **SIP**: 5060 e 5061, TCP e UDP, com limite de conexões novas por origem;
+- **SIP**: 5060 em TCP e UDP e 5061 só em TCP (TLS), com limite de conexões novas por origem;
+- **Teto do SIP**: 1000 pacotes por segundo por IPv4, ou por /64 IPv6, com rajada de 5000, também em conexões estabelecidas. O excesso é descartado;
 - **RTP**: UDP 10000 a 20000;
-- **HTTP (80) por IPv4**: só de `10.5.0.0/16`, a rede do proxy reverso;
+- **HTTP (80) por IPv4**: só de `PROXY_SUBNET`, a rede do proxy reverso;
 - **HTTP (80) por IPv6**: qualquer origem, com limite de taxa, para a validação ACME. Fora da rede do proxy, o Apache só entrega `/.well-known/acme-challenge/` e `/.freepbx-known/`; o resto recebe 403;
-- **ICMP e ICMPv6**: erros, ping com limite de taxa e descoberta de vizinhos.
-
-A faixa `10.5.0.0/16` está fixa em `rootfs/etc/nftables.nft` e `rootfs/etc/apache2/apache2.conf`. Com o proxy em outra rede, altere os dois e reconstrua a imagem.
+- **ICMP e ICMPv6**: erros, ping com limite de taxa, descoberta de vizinhos e MLD.
 
 Para liberar outra porta (IAX, WebSocket, SIP em outra porta), crie um hook em `/data/entrypoint-hooks.d/nftables.d/` que acrescente a regra à chain `inet filter input`. Tabela ou chain própria não serve: o que a chain da imagem descarta não volta a ser aceito.
 
@@ -145,7 +148,27 @@ Para liberar outra porta (IAX, WebSocket, SIP em outra porta), crie um hook em `
 add rule inet filter input tcp dport 8089 accept
 ```
 
+Uma regra acrescentada com `add rule` fica depois do teto do SIP. Isente dele, com `insert rule`, os troncos e os escritórios de IP fixo, os mesmos do `ignoreip` do fail2ban: pacotes com a origem forjada de um deles gastam o teto dele, e o tráfego legítimo é descartado junto.
+
+```nft
+insert rule inet filter input ip saddr 203.0.113.10 meta l4proto . th dport { udp . 5060, tcp . 5060, tcp . 5061 } accept
+```
+
+### O que o firewall descarta
+
+Depois dos hooks, o boot acrescenta ao fim da chain um registro do que cai na política, em TCP e UDP: origem, protocolo e porta de destino, com contador. Cada entrada some 10 minutos depois do último pacote. Cabem 8192 entradas por família de endereço; uma varredura de portas pode enchê-lo.
+
+```bash
+docker exec <container> nft list set inet filter dropv4    # IPv4: origem . protocolo . porta
+docker exec <container> nft list set inet filter dropv6    # IPv6
+docker exec <container> nft list chain inet filter input   # contadores, como o do teto do SIP
+```
+
+Não aparecem no registro os IPs banidos pelo fail2ban nem o excesso do teto do SIP: os dois são descartados antes.
+
 ## fail2ban
+
+O jail `asterisk` bane por 12 h o IP com 10 falhas de autenticação SIP em 10 min. Cada reincidência dobra o tempo, até 1 semana, mais até 1 h sorteada. O IP banido perde todas as portas, em TCP e UDP.
 
 Ignore os IPs fixos de escritórios, troncos, operadoras e monitoramento: a origem de um pacote SIP por UDP pode ser forjada para banir um IP legítimo. A lista fica no volume (`/etc/fail2ban/jail.d` aponta para `/data/fail2ban/jail.d`):
 
@@ -160,6 +183,15 @@ docker exec <container> fail2ban-client get asterisk ignoreip   # confere a list
 ```
 
 O arquivo substitui a lista da imagem: mantenha `127.0.0.1/8 ::1`. Valide sempre com `-t`: com erro de sintaxe, o `reload` é recusado e, no boot seguinte, o `fail2ban` não sobe e nada é banido.
+
+Um jail novo vai num `.local` na mesma pasta e declara `enabled`, `filter` e `logpath`. Ele herda da imagem o `findtime`, o `bantime` e o bloqueio de todas as portas por `nftables`; o `maxretry` é o padrão do fail2ban, 5. O filtro tem de existir em `/etc/fail2ban/filter.d`, que é da imagem. Se o arquivo do `logpath` faltar num boot, o `fail2ban` não sobe.
+
+```ini
+[<nome>]
+enabled = true
+filter = <filtro>
+logpath = <arquivo de log>
+```
 
 ## Hooks
 
