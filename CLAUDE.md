@@ -35,7 +35,7 @@ tests/run.sh                # full battery: needs sudo docker; see tests/README.
 - No `set -e`: handle each error where it happens (`exit 1` in the entrypoint, `return 1` / `failed=1` in the bootstrap).
 - Environment defaults are repeated inline (`${DBHOST-db}`): change every occurrence and the README table.
 - Comments: English, 1 to 3 lines, only the why.
-- `tests/lib/*.sh` grep exact boot log messages (`BAD_LOG`, `in_order`, the G2–G4 checks): changing a log string means updating the test.
+- `tests/lib/*.sh` grep exact boot log messages (`BAD_LOG`, `in_order`, the G2–G5 checks): changing a log string means updating the test.
 - A behaviour change needs its check in `tests/lib/<phase>.sh` and the phase table in `tests/README.md`.
 - Commits: Conventional Commits, component scope, Portuguese subject (`fix(entrypoint): ...`), one component per commit.
 - READMEs are in Portuguese, short and direct.
@@ -47,7 +47,7 @@ tests/run.sh                # full battery: needs sudo docker; see tests/README.
 - Root never writes through a path the `asterisk` user could have planted as a symlink (see `cp --remove-destination`, `hook_trusted`, `runuser -u asterisk`).
 - A hook counts only if it and its directory are root's and not group/other-writable (`hook_trusted`). An untrusted or failing `.nft`, or one that removes the base input rules, stops the boot; an untrusted `.sh` is skipped.
 - Do not change the `/data` layout, the install marker, environment variable names or defaults, or the hook contract without authorization: production volumes depend on them. Every boot must stay idempotent and safe to interrupt.
-- `10.5.0.0/16` is hardcoded in `rootfs/etc/nftables.nft`, `rootfs/etc/apache2/apache2.conf` and `tests/lib/{up,common}.sh`: change them together.
+- The proxy range is `PROXY_SUBNET`. Its default (`10.5.0.0/16`) lives only in the Dockerfile `ENV`, not inline: Apache reads it from its environment, also under `docker exec`. `tests/lib/{up,common}.sh` and both READMEs assume that default: change them together.
 - Never run anything against a production host or stack. `tests/run.sh up`, `down` and every full run delete the containers, volumes and networks named `$NAME-*` (default `fpbxtest`).
 - Justify every new `apt` package.
 
